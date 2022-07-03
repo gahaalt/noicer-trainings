@@ -4,8 +4,11 @@ import shutil
 from collections import Counter
 import tensorflow as tf
 from tensorflow import keras
+from termcolor import colored, cprint
 
 from scripts import toolkit
+
+LOGGING_KWDS = {"color": "green", "attrs": ["bold", "dark"]}
 
 
 def prepare_devices(
@@ -29,7 +32,7 @@ def prepare_devices(
 
 
 def print_model_info(model):
-    print(f"MODEL INFO")
+    cprint(f"MODEL INFO", **LOGGING_KWDS)
     layer_counts = Counter()
     for layer in model.layers:
         if isinstance(layer, tf.keras.layers.Dense):
@@ -40,7 +43,7 @@ def print_model_info(model):
             layer_counts["BatchNorm"] += 1
         if isinstance(layer, tf.keras.layers.Dropout):
             layer_counts["Dropout"] += 1
-    print(f"LAYER COUNTS: {dict(layer_counts)}")
+    cprint(f"LAYER COUNTS: {dict(layer_counts)}", **LOGGING_KWDS)
 
     bn = 0
     biases = 0
@@ -63,11 +66,12 @@ def print_model_info(model):
         if hasattr(layer, "kernel"):
             kernels += layer.kernel.shape.num_elements()
 
-    print(f"TRAINABLE WEIGHTS: {trainable_w}")
-    print(
+    cprint(f"TRAINABLE WEIGHTS: {trainable_w}", **LOGGING_KWDS)
+    cprint(
         f"KERNELS: {kernels} ({kernels / trainable_w * 100:^6.2f}%), "
         f"BIASES: {biases} ({biases / trainable_w * 100:^6.2f}%), "
-        f"BN: {bn} ({bn / trainable_w * 100:^6.2f}%)"
+        f"BN: {bn} ({bn / trainable_w * 100:^6.2f}%)",
+        **LOGGING_KWDS,
     )
 
 
@@ -77,20 +81,22 @@ def save_model_info(model, directory):
     # we will have a nice diagram of model in the output directory
     os.makedirs(directory, exist_ok=True)
 
-    print("SAVING MODEL DIAGRAM")
+    model_diagram_path = os.path.join(directory, "model.png")
+    cprint(f"SAVING MODEL DIAGRAM TO `{model_diagram_path}`", **LOGGING_KWDS)
     keras.utils.plot_model(
         model,
-        to_file=os.path.join(directory, "model.png"),
+        to_file=model_diagram_path,
         show_shapes=True,
         show_layer_names=False,
     )
 
     # we copy original source code to have reproducibile output!
     # this way we can 100% restore the model that was trained
-    print("SAVING CODEBASE")
+    codebase_path = os.path.join(directory, "scripts")
+    cprint(f"SAVING CODEBASE TO `{codebase_path}`", **LOGGING_KWDS)
     shutil.copytree(
         "scripts",
-        os.path.join(directory, "scripts"),
+        codebase_path,
         dirs_exist_ok=True,
         ignore=shutil.ignore_patterns("__pycache__"),
     )
