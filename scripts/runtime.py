@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import shutil
 import sys
 from collections import Counter
@@ -9,7 +10,7 @@ import tensorflow as tf
 from tensorflow import keras
 from termcolor import cprint
 
-from scripts import toolkit
+from scripts import toolkit, runtime
 
 INFO_KWDS = {"color": "green", "attrs": ["bold", "dark"]}
 
@@ -127,11 +128,18 @@ def get_logging_callbacks(directory, profiling=False):
 
 
 def load_checkpoint_if_available(model, optimizer):
+    """
+    Returns:
+        latest_epoch, logdir
+    """
     files = " ".join(os.listdir("."))
     matches = re.findall(r"checkpoint_ep(\d+)", files)
     if not matches:
         cprint(f"CHECKPOINT NOT FOUND! TRAINING FROM SCRATCH...", **INFO_KWDS)
-        return None
+        logdir = f"output{int(time.time())}"
+        runtime.save_model_info(model, logdir)
+        initial_epoch = 0
+        return 0, logdir
 
     latest_epoch = max([int(num) for num in matches])
 
@@ -146,4 +154,4 @@ def load_checkpoint_if_available(model, optimizer):
     # need to build optimizer otherwise optimizer.weights = [] and can't load
     toolkit.build_optimizer(model, optimizer)
     toolkit.load_optimizer(optimizer, checkpoint_pkl)
-    return latest_epoch
+    return latest_epoch, "."
