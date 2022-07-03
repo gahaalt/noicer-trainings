@@ -1,13 +1,16 @@
 import os
 import pickle
-from collections import Counter, abc
 
 import numpy as np
 import tensorflow as tf
+from termcolor import cprint
+
+WARNING_KWDS = {"color": "yellow", "attrs": ["bold", "dark"]}
+INFO_KWDS = {"color": "green", "attrs": ["bold", "dark"]}
 
 
 def get_kernels(model):
-    return [l.kernel for l in model.layers if hasattr(l, 'kernel')]
+    return [l.kernel for l in model.layers if hasattr(l, "kernel")]
 
 
 def clip_many(values, clip_at, clip_from=None, inplace=False):
@@ -27,8 +30,13 @@ def clip_many(values, clip_at, clip_from=None, inplace=False):
 
 
 def concatenate_flattened(arrays):
-    return np.concatenate([x.flatten() if isinstance(x, np.ndarray)
-                           else x.numpy().flatten() for x in arrays], axis=0)
+    return np.concatenate(
+        [
+            x.flatten() if isinstance(x, np.ndarray) else x.numpy().flatten()
+            for x in arrays
+        ],
+        axis=0,
+    )
 
 
 def set_all_weights_from_model(model, source_model):
@@ -38,7 +46,9 @@ def set_all_weights_from_model(model, source_model):
         if w1.shape == w2.shape:
             w1.assign(w2)
         else:
-            print(f"WARNING: Skipping {w1.name}: {w1.shape} != {w2.shape}")
+            cprint(
+                f"WARNING: Skipping {w1.name}: {w1.shape} != {w2.shape}", **WARNING_KWDS
+            )
 
 
 def clone_model(model):
@@ -61,12 +71,17 @@ def reset_weights_to_checkpoint(model, ckp=None, skip_keyword=None):
             skipped += 1
             continue
         w1.assign(w2)
-    print(f"INFO RESET: Skipped {skipped} layers with keyword {skip_keyword}!")
+    if skip_keyword is not None:
+        cprint(
+            f"INFO RESET: Skipped {skipped} layers with keyword {skip_keyword}!",
+            **INFO_KWDS,
+        )
     return skipped
 
 
 def get_optimizer_learning_rate_metric(opt):
-    if hasattr(opt, '_decayed_lr'):
+    if hasattr(opt, "_decayed_lr"):
+
         def lr(*args):
             return opt._decayed_lr(tf.float32)
 
@@ -82,7 +97,7 @@ def save_optimizer(optimizer, path):
     if dirpath := os.path.dirname(path):
         os.makedirs(dirpath, exist_ok=True)
     weights = optimizer.get_weights()
-    with open(path, 'wb') as f:
+    with open(path, "wb") as f:
         pickle.dump(weights, f)
 
 
@@ -92,13 +107,13 @@ def build_optimizer(model, optimizer):
 
 
 def load_optimizer(optimizer, path):
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         weights = pickle.load(f)
     try:
         optimizer.set_weights(weights)
     except ValueError as e:
-        print("!!!WARNING!!! Tried to load empty optimizer!")
-        print(e)
+        cprint("WARNING: Tried to load empty optimizer!", **WARNING_KWDS)
+        cprint(e, **WARNING_KWDS)
 
 
 def save_model(model, path):
@@ -116,10 +131,10 @@ class CheckpointAfterEpoch(tf.keras.callbacks.Callback):
         self.keep_only_latest = keep_only_latest_checkpoint
 
     def on_epoch_end(self, epoch, logs=None):
-        path = os.path.join(self.directory_path, f"checkpoint_ep{epoch}")
+        path = os.path.join(self.directory_path, f"checkpoint_ep{epoch + 1}")
         save_model(self.model, path)
         save_optimizer(self.model.optimizer, path)
         if self.keep_only_latest and epoch > 0:
-            prev_path = os.path.join(self.directory_path, f"checkpoint_ep{epoch - 1}")
+            prev_path = os.path.join(self.directory_path, f"checkpoint_ep{epoch}")
             os.remove(prev_path + ".h5")
             os.remove(prev_path + ".pkl")

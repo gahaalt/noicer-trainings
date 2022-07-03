@@ -52,12 +52,19 @@ with strategy.scope():
         ],
     )
 
-runtime.save_model_info(model, LOGDIR)
+initial_epoch = runtime.load_checkpoint_if_available(model, optimizer)
+if initial_epoch is None:
+    logdir = f"output{int(time.time())}"
+    runtime.save_model_info(model, logdir)
+    initial_epoch = 0
+else:
+    logdir = "."
 
 model.fit(
     ds["train"],
     validation_data=ds["validation"],
     epochs=65,
-    steps_per_epoch=3900 / BS_MULTIPLER,
+    steps_per_epoch=math.ceil(3900 / BS_MULTIPLER),
     callbacks=runtime.get_logging_callbacks(LOGDIR),
+    initial_epoch=initial_epoch,
 )

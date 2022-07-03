@@ -67,7 +67,6 @@ def run(model, LOGDIR):
 models_to_test = [
     models.cifar.ResNet20(),
     models.cifar.ResNet56(),
-    models.cifar.WideResNet(16, 2),
     models.cifar.WideResNet(16, 4),
     models.cifar.WideResNet(16, 8),
 ]

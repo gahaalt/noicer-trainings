@@ -1,14 +1,17 @@
 import os
+import re
 import shutil
-
+import sys
 from collections import Counter
+from pathlib import Path
+
 import tensorflow as tf
 from tensorflow import keras
-from termcolor import colored, cprint
+from termcolor import cprint
 
 from scripts import toolkit
 
-LOGGING_KWDS = {"color": "green", "attrs": ["bold", "dark"]}
+INFO_KWDS = {"color": "green", "attrs": ["bold", "dark"]}
 
 
 def prepare_devices(
@@ -32,7 +35,6 @@ def prepare_devices(
 
 
 def print_model_info(model):
-    cprint(f"MODEL INFO", **LOGGING_KWDS)
     layer_counts = Counter()
     for layer in model.layers:
         if isinstance(layer, tf.keras.layers.Dense):
@@ -43,7 +45,7 @@ def print_model_info(model):
             layer_counts["BatchNorm"] += 1
         if isinstance(layer, tf.keras.layers.Dropout):
             layer_counts["Dropout"] += 1
-    cprint(f"LAYER COUNTS: {dict(layer_counts)}", **LOGGING_KWDS)
+    cprint(f"LAYERS IN THE MODEL: {dict(layer_counts)}", **INFO_KWDS)
 
     bn = 0
     biases = 0
@@ -66,12 +68,12 @@ def print_model_info(model):
         if hasattr(layer, "kernel"):
             kernels += layer.kernel.shape.num_elements()
 
-    cprint(f"TRAINABLE WEIGHTS: {trainable_w}", **LOGGING_KWDS)
+    cprint(f"TRAINABLE WEIGHTS: {trainable_w}", **INFO_KWDS)
     cprint(
         f"KERNELS: {kernels} ({kernels / trainable_w * 100:^6.2f}%), "
         f"BIASES: {biases} ({biases / trainable_w * 100:^6.2f}%), "
         f"BN: {bn} ({bn / trainable_w * 100:^6.2f}%)",
-        **LOGGING_KWDS,
+        **INFO_KWDS,
     )
 
 
@@ -82,7 +84,7 @@ def save_model_info(model, directory):
     os.makedirs(directory, exist_ok=True)
 
     model_diagram_path = os.path.join(directory, "model.png")
-    cprint(f"SAVING MODEL DIAGRAM TO `{model_diagram_path}`", **LOGGING_KWDS)
+    cprint(f"SAVING MODEL DIAGRAM TO `{model_diagram_path}`", **INFO_KWDS)
     keras.utils.plot_model(
         model,
         to_file=model_diagram_path,
@@ -93,13 +95,22 @@ def save_model_info(model, directory):
     # we copy original source code to have reproducibile output!
     # this way we can 100% restore the model that was trained
     codebase_path = os.path.join(directory, "scripts")
-    cprint(f"SAVING CODEBASE TO `{codebase_path}`", **LOGGING_KWDS)
+    cprint(f"SAVING CODEBASE TO `{codebase_path}`", **INFO_KWDS)
     shutil.copytree(
         "scripts",
         codebase_path,
         dirs_exist_ok=True,
         ignore=shutil.ignore_patterns("__pycache__"),
     )
+
+    try:
+        script_name = Path(sys.argv[0]).name
+        shutil.copy(script_name, directory)
+        cprint(
+            f"RESUME BY RUNNING `{os.path.join(directory, script_name)}`", **INFO_KWDS
+        )
+    except NameError:
+        pass
 
 
 def get_logging_callbacks(directory, profiling=False):
@@ -113,3 +124,26 @@ def get_logging_callbacks(directory, profiling=False):
         keep_only_latest_checkpoint=False,
     )
     return tensorboard_callback, checkpoint_callback
+
+
+def load_checkpoint_if_available(model, optimizer):
+    files = " ".join(os.listdir("."))
+    matches = re.findall(r"checkpoint_ep(\d+)", files)
+    if not matches:
+        cprint(f"CHECKPOINT NOT FOUND! TRAINING FROM SCRATCH...", **INFO_KWDS)
+        return None
+
+    latest_epoch = max([int(num) for num in matches])
+
+    checkpoint_h5 = f"checkpoint_ep{latest_epoch}.h5"
+    checkpoint_pkl = f"checkpoint_ep{latest_epoch}.pkl"
+    assert checkpoint_h5 in os.listdir("."), "MISSING h5 CHECKPOINT"
+    assert checkpoint_pkl in os.listdir("."), "MISSING pkl CHECKPOINT"
+
+    cprint(f"LOADING CHECKPOINTS: {checkpoint_h5} {checkpoint_pkl}", **INFO_KWDS)
+    toolkit.reset_weights_to_checkpoint(model, checkpoint_h5)
+
+    # need to build optimizer otherwise optimizer.weights = [] and can't load
+    toolkit.build_optimizer(model, optimizer)
+    toolkit.load_optimizer(optimizer, checkpoint_pkl)
+    return latest_epoch

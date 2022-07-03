@@ -6,12 +6,11 @@ import tensorflow.keras as keras
 from scripts import datasets, models, runtime, toolkit
 
 BS_MULTIPLER = 1
-LOGDIR = f"output{int(time.time())}"
 
 strategy = runtime.prepare_devices(
     mixed_precision=True,
-    multi_gpu=False,
     memory_growth=False,
+    multi_gpu=False,
 )
 
 ds = datasets.cifar(
@@ -52,12 +51,19 @@ with strategy.scope():
         ],
     )
 
-runtime.save_model_info(model, LOGDIR)
+initial_epoch = runtime.load_checkpoint_if_available(model, optimizer)
+if initial_epoch is None:
+    logdir = f"output{int(time.time())}"
+    runtime.save_model_info(model, logdir)
+    initial_epoch = 0
+else:
+    logdir = "."
 
 model.fit(
     ds["train"],
     validation_data=ds["validation"],
     epochs=16,
     steps_per_epoch=math.ceil(4000 / BS_MULTIPLER),
-    callbacks=runtime.get_logging_callbacks(LOGDIR),
+    callbacks=runtime.get_logging_callbacks(logdir),
+    initial_epoch=initial_epoch,
 )
